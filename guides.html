@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patterns &amp; Gotchas · DPB2 Documentation</title>
+  <meta name="description" content="Hard-won DPB2 patterns: coroutine rules, pathfinder reload, input hooks, stale values, task ordering and anti-stuck logic.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Practical</span>
+      <h1>Patterns &amp; Gotchas</h1>
+      <p class="lead">A field guide to the things that bite you. These are the recurring lessons behind a stable
+        DPB2 bot, read them before you spend hours debugging the same issue.</p>
+
+      <h2 id="coroutines">Coroutine discipline</h2>
+      <p>The DPB coroutine scheduler only permits certain awaits. Violations throw
+        <code>CoroutineBehaviorException</code> and kill the loop.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Don't</th><th>Do</th></tr></thead>
+          <tbody>
+            <tr><td><code>await someTask</code> (raw external Task)</td><td><code>await Coroutine.ExternalTask(someTask)</code></td></tr>
+            <tr><td><code>await Task.Yield()</code></td><td><code>await Coroutine.Sleep(0)</code></td></tr>
+            <tr><td><code>await ExilePather.ReloadAsync(...)</code></td><td><code>ExilePather.Reload(true)</code> (synchronous)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Inside a coroutine you may only await <code>Coroutine.Sleep</code>/<code>Yield</code>, framework coroutine
+        methods (<code>TaskManager.Run</code>, <code>Coroutines.InteractWith</code>), or
+        <code>Coroutine.ExternalTask</code>.</p>
+
+      <h2 id="pathfinder-reload">Reload the pathfinder per area</h2>
+      <p>Before any pathing or explorer use in a freshly-entered area, reload the pather <strong>once</strong>,
+        guarded on the area hash, and gate everything else on <code>IsReady</code>:</p>
+      <pre><code class="language-csharp">if (LokiPoe.LocalData.AreaHash != _pathHash)
+{
+    ExilePather.Reload(true);     // synchronous, never await the async variant
+    ExilePather.ClearObstacles(); // dynamic obstacles are per-map
+    Explorer.Reset();
+    _pathHash = LokiPoe.LocalData.AreaHash;
+}
+if (!ExilePather.IsReady) return;  // gate explorer.Tick()/FindPath behind this</code></pre>
+      <p>Skip it and you get <em>"Cannot use PathExistsBetween before Reload is called."</em></p>
+
+      <h2 id="enable-hook">Enable the input hook once</h2>
+      <p>Call <code>LokiPoe.ProcessHookManager.Enable()</code> a single time in <code>Start()</code>. Without it,
+        <code>UseAt</code>/<code>UseOn</code> return <code>ProcessHookManagerNotEnabled</code>. Calling it every
+        loop inflates the main loop to ~800–1000&nbsp;ms; once-only keeps it ~200&nbsp;ms and the bot stays
+        responsive.</p>
+
+      <h2 id="held-fire">Held-fire / channeling</h2>
+      <p>For continuous fire, use <code>BeginUseAt(slot, inPlace, pos, clearKeys: false)</code> and
+        <strong>never</strong> call <code>ClearAllKeyStates()</code> between shots, any clear stops the held key
+        and breaks channeling. Only clear key states immediately before a <strong>dodge</strong>, so the roll
+        registers; then resume firing.</p>
+
+      <h2 id="stale-values">Some values are stale or static</h2>
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Metadata existence ≠ a live value</span>
+          <p>A member appearing in the DLL doesn't mean it tracks live state. Known traps:</p>
+          <ul style="margin-bottom:0">
+            <li><code>InstanceInfo.MonstersRemaining</code> counts inactive statue-monsters, it never reaches a
+              low value, so don't gate map completion on it alone.</li>
+            <li>Crossbow ammo (<code>Skill.UsesAvailable</code>, bolt stats, <code>CurrentSouls</code>) is
+              static/stale, it doesn't follow the live magazine.</li>
+            <li><code>Skill.CanUse</code>/<code>CanUseEx</code> grayed-out detection flip-flopped across versions
+              (added 0.4.5.19 → reverted 0.4.5.20 → re-added 0.4.5.21). Check your build before relying on it.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2 id="guard-reads">Guard every entity/item read</h2>
+      <p>Property reads can throw. <code>Item.Name</code>/<code>Class</code>/<code>Rarity</code> throw
+        <em>"BaseItemType not found"</em> for some ground items; <code>HasVisibleHighlightLabel</code> can throw
+        <code>NullReferenceException</code>. An unguarded read inside a LINQ filter crashes the whole task.</p>
+      <pre><code class="language-csharp">static bool SafeShouldLoot(WorldItem w)
+{
+    try { return /* read w.Item.Rarity / Class / Metadata */ ...; }
+    catch { return true; } // never silently skip a possible jackpot
+}</code></pre>
+      <p>Prefer matching on <code>Metadata</code> (language-agnostic, less throw-prone) over localized
+        <code>Name</code> for detection logic.</p>
+
+      <h2 id="task-order">Task ordering</h2>
+      <p>Because the <code>TaskManager</code> restarts evaluation whenever a task returns <code>true</code>, list
+        order is your priority system. A robust endgame order:</p>
+      <pre><code class="language-text">Death → Flask → Evade → Watchdog → Telegraph-dodge →
+Precursor → Loot → Combat → Boss → Chest → Shrine →
+Mechanics → Explore → MapEnd</code></pre>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Loot before combat (with a close-threat gate)</span>
+          <p>If combat runs first, any monster in range keeps the combat task returning <code>true</code> and loot
+            never gets a turn, drops pile up unlooted. Put loot before combat, but give the loot task a
+            close-threat gate: if a hostile is within engage range and the item isn't already adjacent, return
+            <code>false</code> so combat clears the pack first. You get "fight pack → loot its drops → move on."</p>
+        </div>
+      </div>
+
+      <h2 id="area-flags">Per-visit flags &amp; the area hash</h2>
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Update the area hash before any early-return</span>
+          <p>In a task that uses a per-visit "done" flag (e.g. a stash task that should run each hideout visit),
+            put the area-hash reset <strong>before</strong> any <code>if (!IsHideout) return false</code>. If the
+            reset sits after the early-return, the hash freezes while you're in maps and the same hideout never
+            counts as a new visit, the flag sticks <code>true</code> forever. Let in-map ticks update the hash to
+            the map's value so the next return registers as a change.</p>
+        </div>
+      </div>
+
+      <h2 id="portals">Town portals are MultiplexPortal</h2>
+      <p>The town/return portal you create with <kbd class="kbd">B</kbd> in a map is a
+        <code>MultiplexPortal</code> NetworkObject, <strong>not</strong> the <code>Portal</code> type, so
+        <code>GetObjectsByType&lt;Portal&gt;()</code> misses it. Find return/map portals by matching both:</p>
+      <pre><code class="language-csharp">bool IsPortal(NetworkObject o) =&gt;
+    o is Portal
+    || o.Name.Contains("Portal")
+    || o.Metadata.Contains("MultiplexPortal");</code></pre>
+      <p>When opening the next map, exclude completed portals (their name contains "Complet"/"Conclu") so you
+        don't re-enter a finished map.</p>
+
+      <h2 id="anti-stuck">Anti-stuck &amp; recovery</h2>
+      <p>Optimal routing is solved (<code>ExilePather</code> gives the best navmesh route). Getting stuck is a
+        movement-<em>execution</em> problem. Defensive measures that keep a bot progressing:</p>
+      <ul>
+        <li><strong>String-pull</strong>, aim at the farthest path waypoint with clear line-of-sight
+          (<code>CanObjectSee</code>) so you never cut a corner into a wall.</li>
+        <li><strong>Give-up counters</strong>, after N consecutive no-progress events, abandon the target:
+          <code>Explorer.Ignore(loc)</code> for explore, blacklist the object id for loot/chests.</li>
+        <li><strong>Dynamic obstacles</strong>, when a corridor is navmesh-walkable but physically blocked,
+          <code>AddCircleObstacle</code> ahead + <code>SignalObstacleUpdate()</code> so future paths route around
+          it. Clear obstacles on area change.</li>
+        <li><strong>Blind dodge off-mesh</strong>, after a resurrect that lands you off the navmesh,
+          <code>FindWalkableNudge</code> finds nothing; dodge-roll blindly toward the map entry point (guaranteed
+          on-mesh) to get back onto the navmesh.</li>
+        <li><strong>Activity guard</strong>, don't treat "standing still while a nearby enemy is losing HP" as
+          stuck; ranged standing combat is legitimate.</li>
+      </ul>
+
+      <h2 id="inventory-full">Detecting a full inventory</h2>
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Per-item-id counters don't work for "can't pick up"</span>
+          <p><code>Coroutines.InteractWith</code> returns OK even when an item can't be picked up (inventory full),
+            so a naive loop re-targets it forever. A per-item-id attempt counter fails too: each re-detection
+            gets a different <code>WorldItem</code> id, resetting the count. The working signal is the
+            <strong>inventory item count</strong>: snapshot <code>Items.Count</code> before/after interacting; if
+            a non-stackable item's count didn't grow, it didn't fit. After a few such failures, go dump/sell.
+            (Skip stackables; they merge without growing the count.)</p>
+        </div>
+      </div>
+
+      <h2 id="combat-conservative">Combat changes are regression-prone</h2>
+      <p>"Smart" combat additions (telegraph dodging, line-of-sight gating, door filters) frequently regress
+        working behaviour. For example, a too-eager telegraph dodge makes the bot endlessly sidestep instead of
+        closing in to attack a ranged enemy. Be conservative:</p>
+      <ul>
+        <li>Only telegraph-dodge for <em>boss/unique</em> threats, and only when they're genuinely close.</li>
+        <li>Keep shooting as the default behaviour; treat kiting/dodging as occasional support, not the main loop.</li>
+        <li>When surrounded and healthy, an AoE build should <em>nuke in place</em>, not flee into a wall.</li>
+        <li>Test each combat tweak in isolation; they interact in surprising ways.</li>
+      </ul>
+
+      <h2 id="completion">Map completion logic</h2>
+      <p><code>IsMapCompleted</code> is reliable when <code>true</code>, but can stay <code>false</code> at 100%
+        explored if the objective (often the boss) isn't done. A robust "map done" signal combines both:</p>
+      <pre><code class="language-csharp">bool mapDone = LokiPoe.InstanceInfo.IsMapCompleted
+    || (!explorer.HasLocation &amp;&amp; explorer.PercentComplete &gt;= 80);</code></pre>
+      <p>If you must kill the boss but it never loaded (the explorer marked tiles "seen" by line-of-sight without
+        physically entering the arena), re-sweep: tighten the explorer's seen/known radius and
+        <code>Explorer.Reset()</code> to force physical traversal, up to a sweep cap.</p>
+
+      <h2 id="checklist">Pre-flight checklist</h2>
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Before you blame the API</span>
+          <ul style="margin-bottom:0">
+            <li>Did you <code>ProcessHookManager.Enable()</code> in <code>Start()</code>?</li>
+            <li>Did you <code>ExilePather.Reload(true)</code> for this area, and gate on <code>IsReady</code>?</li>
+            <li>Are all item/entity reads wrapped in try/catch?</li>
+            <li>Is every <code>await</code> a framework coroutine or wrapped in <code>ExternalTask</code>?</li>
+            <li>Is <code>Tick()</code> free of actions (flags/reads only)?</li>
+            <li>Does at least one task always make progress so the loop never idles in a map?</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="page-nav">
+        <a class="prev" href="api-discovery.html"><span>Previous</span><strong>← API Discovery</strong></a>
+        <a class="next" href="resources.html"><span>Next</span><strong>Resources →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

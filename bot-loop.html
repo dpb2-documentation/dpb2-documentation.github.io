@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Bot Loop · DPB2 Documentation</title>
+  <meta name="description" content="How IBot, TaskManager, Coroutine and ITask combine into a working DPB2 bot, the TaskManager / coroutine pattern.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Core Concepts</span>
+      <h1>The Bot Loop</h1>
+      <p class="lead">An <code>IBot</code> is a thin shell around a <code>TaskManager</code> and a
+        <code>Coroutine</code>. Tasks decide; the coroutine acts. This is the pattern almost every DPB2 bot uses.</p>
+
+      <h2 id="big-picture">The big picture</h2>
+      <p>The <code>BotManager</code> runs a background <code>BotThread</code> and calls your bot's
+        <code>Tick()</code> on an interval. Your bot holds two things:</p>
+      <ul>
+        <li>A <strong><code>TaskManager</code></strong>, an ordered list of <code>ITask</code> units it evaluates each cycle.</li>
+        <li>A <strong><code>Coroutine</code></strong>, the async "main loop" where actions actually execute.</li>
+      </ul>
+      <p>Both <code>new TaskManager()</code> and <code>new Coroutine(Func&lt;Task&gt;)</code> are public, so you
+        construct them yourself.</p>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Coroutine API surface</span>
+          <p><code>Coroutine.Sleep(ms)</code>, <code>Coroutine.Yield()</code> and <code>Coroutine.Wait(...)</code>
+            are <strong>static</strong>. <code>Resume()</code>, <code>Dispose()</code> and <code>IsFinished</code>
+            are instance members.</p>
+        </div>
+      </div>
+
+      <h2 id="skeleton">A minimal IBot skeleton</h2>
+      <pre><code class="language-csharp">public class MyBot : IBot
+{
+    private readonly TaskManager _taskManager = new TaskManager();
+    private Coroutine _coroutine;
+
+    public void Initialize()
+    {
+        // order == evaluation order
+        _taskManager.Add(new DeathTask());
+        _taskManager.Add(new CombatTask());
+        _taskManager.Add(new LootTask());
+        _taskManager.Add(new ExploreTask());
+    }
+
+    public void Start()
+    {
+        // CRITICAL: input injection must be enabled or UseAt/UseOn return
+        // ProcessHookManagerNotEnabled. Call this ONCE, not every loop.
+        LokiPoe.ProcessHookManager.Enable();
+
+        _taskManager.Start();
+        _coroutine = new Coroutine(() =&gt; MainLoop());
+    }
+
+    public void Tick()
+    {
+        _taskManager.Tick();
+        if (_coroutine == null || _coroutine.IsFinished)
+            _coroutine = new Coroutine(() =&gt; MainLoop());
+        _coroutine.Resume();
+    }
+
+    public void Stop()
+    {
+        _taskManager.Stop();
+        try { _coroutine?.Dispose(); }
+        catch (CoroutineStoppedException) { /* expected, swallow it */ }
+    }
+
+    private async Task MainLoop()
+    {
+        while (true)
+        {
+            if (!LokiPoe.IsInGame)
+            {
+                await Coroutine.Sleep(250);
+            }
+            else
+            {
+                var result = await _taskManager.Run(
+                    TaskGroup.Enabled, RunBehavior.UntilHandled);
+
+                if (result == RunTasksResult.NoTasksRan)
+                    await Coroutine.Sleep(1000);
+            }
+            await Coroutine.Yield();
+        }
+    }
+}</code></pre>
+
+      <h2 id="stop-exception">Disposing the coroutine cleanly</h2>
+      <p><code>Coroutine.Dispose()</code> unwinds the loop by injecting a
+        <code>CoroutineStoppedException</code> at the current <code>await</code>. If you don't catch it, it leaks
+        up to <code>BotManager</code> and is logged as an <code>InjectionDesyncException</code> on every Stop.
+        Always wrap <code>Dispose()</code> in try/catch and ignore that exception.</p>
+
+      <h2 id="itask">ITask, the state-machine unit</h2>
+      <p>An <code>ITask</code> is one decision unit. Its key method is <code>Task&lt;bool&gt; Run()</code>:</p>
+      <ul>
+        <li>Do <strong>one</strong> action and <code>return true</code> → the <code>TaskManager</code> restarts
+          from the first task and re-evaluates everything.</li>
+        <li><code>return false</code> → fall through to the next task in the list.</li>
+      </ul>
+      <p>With <code>RunBehavior.UntilHandled</code>, tasks run in order until one returns <code>true</code>.
+        <code>ITask</code> also requires the usual <code>Start</code>/<code>Stop</code>/<code>Tick</code>/<code>Message</code>/<code>Logic</code>
+        plus the <code>IAuthored</code> members; these are mostly no-ops.</p>
+
+      <pre><code class="language-csharp">public class LootTask : ITask
+{
+    public async Task&lt;bool&gt; Run()
+    {
+        var item = NearestLootableItem();
+        if (item == null)
+            return false;                 // nothing to do, let the next task run
+
+        await Coroutines.InteractWith(item, false);
+        return true;                      // handled, restart evaluation from the top
+    }
+
+    public void Tick() { }                // empty, actions go in Run(), not Tick()
+    // …Start/Stop/Message/Logic + Name/Author/Description/Version
+}</code></pre>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Task order is your priority system</span>
+          <p>Because evaluation restarts from the top whenever a task returns <code>true</code>, the list order
+            <em>is</em> the priority. A practical ordering is
+            <code>Death → Flask → Evade → Loot → Combat → Boss → Explore → MapEnd</code>. Put survival first and
+            map-completion last. See <a href="guides.html#task-order">Patterns &amp; Gotchas</a> for why loot
+            usually belongs before combat.</p>
+        </div>
+      </div>
+
+      <h2 id="coroutine-rules">Coroutine rules you must respect</h2>
+      <p>The DPB coroutine scheduler is strict about what you may <code>await</code>. Breaking these throws
+        <code>CoroutineBehaviorException</code> and stops your loop.</p>
+
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Never await an external Task directly</span>
+          <p>Inside a coroutine you may only <code>await</code> <code>Coroutine.Sleep</code>/<code>Yield</code>,
+            framework coroutine methods (like <code>TaskManager.Run</code> or <code>Coroutines.InteractWith</code>),
+            or an external task wrapped in <code>Coroutine.ExternalTask(theTask)</code>. Awaiting a raw
+            <code>Task</code> (e.g. <code>ExilePather.ReloadAsync</code>) throws
+            <em>"No continuation was queued … external task was awaited."</em></p>
+        </div>
+      </div>
+
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Never use <code>await Task.Yield()</code> in a task</span>
+          <p>It throws the same external-task exception the moment it runs. Use
+            <code>await Coroutine.Sleep(0)</code> instead.</p>
+        </div>
+      </div>
+
+      <h2 id="routine-vs-tasks">Routines vs. multi-task bots</h2>
+      <p>DPB2 supports a separate <code>IRoutine</code> component for combat, invoked through
+        <code>RoutineManager.Current.Logic("hook_combat")</code>. This decouples combat from the bot so a single
+        routine can serve many bots. The trade-off:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Approach</th><th>Pros</th><th>Cons</th></tr></thead>
+          <tbody>
+            <tr><td>Combat inside the task list</td><td>Most responsive; full control; no hook indirection.</td><td>Combat is coupled to that bot.</td></tr>
+            <tr><td>Combat as an <code>IRoutine</code></td><td>Pluggable / reusable across bots.</td><td>Extra indirection; per-build skill config needed.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Both are valid. Many PoE2 bots keep combat in the task list for responsiveness; others adopt a routine
+        for extensibility. Choose based on whether you need swappable combat.</p>
+
+      <h2 id="when-empty">Don't let the loop idle in a map</h2>
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">No task should return false forever while in a map</span>
+          <p>If you ever reach a state where every task returns <code>false</code> while the character is in a
+            map, the bot stands idle and can die. Always have a fallback task (explore, leave, or recover) that
+            makes progress so the loop never stalls.</p>
+        </div>
+      </div>
+
+      <div class="page-nav">
+        <a class="prev" href="architecture.html"><span>Previous</span><strong>← Plugin Architecture</strong></a>
+        <a class="next" href="game-api.html"><span>Next</span><strong>Game API →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

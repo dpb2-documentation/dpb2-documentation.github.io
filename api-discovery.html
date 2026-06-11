@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Discovery · DPB2 Documentation</title>
+  <meta name="description" content="Discover undocumented DPB2 API members with a reflection dumper using MetadataLoadContext, no DLL execution required.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Reference</span>
+      <h1>API Discovery</h1>
+      <p class="lead">The bundled XML documents framework helpers, but not entity property members. To discover
+        those, inspect the DLL metadata directly with a reflection dumper.</p>
+
+      <h2 id="why">Why you need this</h2>
+      <p><code>DreamPoeBot.xml</code> documents the framework helpers (Coroutines, Pathfinding, ObjectManager)
+        well, but the property members of game entities, what's actually on a <code>Monster</code>,
+        <code>Item</code>, <code>AtlasNode</code> or a UI panel, exist only in the compiled DLL metadata. The
+        reliable way to find them is to enumerate the type's members via reflection.</p>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Use MetadataLoadContext, don't run the DLL</span>
+          <p><code>MetadataLoadContext</code> loads an assembly purely for inspection. It never executes any code,
+            so you can safely enumerate <code>DreamPoeBot.dll</code> without launching the bot or attaching to the
+            game. This is what makes a standalone dumper tool possible.</p>
+        </div>
+      </div>
+
+      <h2 id="approach">The approach</h2>
+      <ol>
+        <li>Create a small console project targeting <code>net8.0</code>.</li>
+        <li>Add the NuGet package <code>System.Reflection.MetadataLoadContext</code>.</li>
+        <li>Point a <code>MetadataLoadContext</code> at <code>DreamPoeBot.dll</code> (plus the .NET runtime
+          assemblies as resolver paths).</li>
+        <li>Resolve a type by name and print its public/instance members.</li>
+      </ol>
+
+      <h2 id="example">A minimal dumper</h2>
+      <pre><code class="language-csharp">using System.Reflection;
+
+// Resolve assemblies from the DPB folder + the .NET runtime directory.
+var dpb = Environment.GetEnvironmentVariable("DPB2")
+          ?? @"E:\DPB2 v04301\DPB2";
+var runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+
+var paths = Directory.GetFiles(dpb, "*.dll")
+    .Concat(Directory.GetFiles(runtime, "*.dll"))
+    .Distinct();
+
+var resolver = new PathAssemblyResolver(paths);
+using var mlc = new MetadataLoadContext(resolver);
+
+var asm = mlc.LoadFromAssemblyPath(Path.Combine(dpb, "DreamPoeBot.dll"));
+
+foreach (var typeName in args)              // e.g. "Monster" "AtlasNode"
+{
+    var type = asm.GetTypes()
+        .FirstOrDefault(t =&gt; t.Name == typeName || t.FullName == typeName);
+    if (type == null) { Console.WriteLine($"!! {typeName} not found"); continue; }
+
+    Console.WriteLine($"\n=== {type.FullName} : {type.BaseType?.Name} ===");
+
+    const BindingFlags F = BindingFlags.Public | BindingFlags.Instance
+                         | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+    foreach (var p in type.GetProperties(F))
+        Console.WriteLine($"  prop  {p.PropertyType.Name,-22} {p.Name}");
+    foreach (var m in type.GetMethods(F).Where(m =&gt; !m.IsSpecialName))
+        Console.WriteLine($"  meth  {m.ReturnType.Name,-22} {m.Name}(" +
+            string.Join(", ", m.GetParameters()
+                .Select(x =&gt; $"{x.ParameterType.Name} {x.Name}")) + ")");
+}</code></pre>
+
+      <h2 id="usage">Usage</h2>
+      <p>Dump one or more types by name, or a whole namespace:</p>
+      <pre><code class="language-powershell"># dump specific types
+dotnet run -- Monster Item AtlasNode
+
+# dump everything in a namespace (extend the tool to accept --ns)
+dotnet run -- --ns DreamPoeBot.Loki.Game.Objects</code></pre>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Handy extra flags</span>
+          <p>Worthwhile additions: <code>--ns &lt;Namespace&gt;</code> to list every type in a namespace, and an
+            <code>--impl &lt;Interface&gt;</code> mode to find which types implement an interface (useful to confirm,
+            for example, that no built-in <code>IBot</code>/<code>IRoutine</code>/<code>IPlayerMover</code> ships
+            inside the core DLL).</p>
+        </div>
+      </div>
+
+      <h2 id="walk-base">Walk the base types</h2>
+      <p>Because <code>DeclaredOnly</code> shows only members declared on the type itself, walk up
+        <code>BaseType</code> to see inherited members too. That's how you discover that a <code>Monster</code>'s
+        <code>Health</code>/<code>HealthPercent</code> actually come from <code>Actor</code>, and
+        <code>Position</code>/<code>Metadata</code> from <code>NetworkObject</code>.</p>
+      <pre><code class="language-csharp">for (var t = type; t != null &amp;&amp; t.Name != "Object"; t = t.BaseType)
+{
+    Console.WriteLine($"--- declared on {t.Name} ---");
+    // …print t.GetProperties(DeclaredOnly) as above
+}</code></pre>
+
+      <h2 id="workflow">A practical workflow</h2>
+      <ol class="steps">
+        <li>
+          <h3>See a type you don't understand in IntelliSense</h3>
+          <p>You get a <code>Monster</code> back from <code>GetObjectsByType</code> but don't know what's on it.</p>
+        </li>
+        <li>
+          <h3>Dump it</h3>
+          <p><code>dotnet run -- Monster</code> prints every property and method, including the base-class chain.</p>
+        </li>
+        <li>
+          <h3>Confirm namespaces &amp; signatures</h3>
+          <p>The dump shows exact return types and parameter lists, so you call <code>UseOn</code> /
+            <code>FastMove</code> / <code>FindPath</code> with the right arguments the first time.</p>
+        </li>
+        <li>
+          <h3>Verify before relying on it in-game</h3>
+          <p>Metadata tells you a member <em>exists</em>; it doesn't guarantee the value is live. Some fields are
+            stale or static (see <a href="guides.html#stale-values">Patterns &amp; Gotchas</a>). Log and confirm.</p>
+        </li>
+      </ol>
+
+      <div class="page-nav">
+        <a class="prev" href="game-api.html"><span>Previous</span><strong>← Game API</strong></a>
+        <a class="next" href="guides.html"><span>Next</span><strong>Patterns &amp; Gotchas →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

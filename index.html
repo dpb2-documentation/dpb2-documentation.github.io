@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPB2 Documentation, DreamPoeBot 2 Plugin Development</title>
+  <meta name="description" content="Community documentation for building plugins and bots for DreamPoeBot 2 (DPB2), a Path of Exile 2 automation framework.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content" data-toc="off">
+
+      <section class="hero">
+        <span class="eyebrow">DreamPoeBot 2 · Path of Exile 2</span>
+        <h1>DPB2 Documentation</h1>
+        <p class="lead">A practical guide to writing plugins, bots, routines and movers for DreamPoeBot 2.
+          It walks you from setting up your toolchain to working with the game API, written by members for members.</p>
+        <div class="hero-actions">
+          <a class="btn btn--primary" href="getting-started.html">
+            Get Started
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+          <a class="btn btn--ghost" href="architecture.html">Plugin Architecture</a>
+          <a class="btn btn--ghost" href="game-api.html">Game API Reference</a>
+        </div>
+      </section>
+
+      <h2 id="what-is-dpb2">What is DPB2?</h2>
+      <p><strong>DreamPoeBot 2 (DPB2)</strong> is an automation framework for <strong>Path of Exile 2</strong>,
+        built on .NET 8 and WPF. If you've worked with the original Exilebuddy, the API will feel familiar:
+        almost everything lives under the <code>DreamPoeBot.Loki.*</code> namespaces.
+        DPB2 reads the game state straight from client memory (entities, health, the navmesh, the UI panels)
+        and hands you that data through a broad API, so you can write your own bots and behaviours as <strong>precompiled .NET plugins</strong>.</p>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Unofficial, community-maintained</span>
+          <p>This site explains how the DPB2 plugin system works, written by members for members. It isn't an
+            official publication, so when something really matters, check it against the bundled
+            <code>DreamPoeBot.xml</code> and the live DLL metadata.</p>
+        </div>
+      </div>
+
+      <h2 id="start-here">Start here</h2>
+      <div class="card-grid">
+        <a class="card" href="getting-started.html">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>
+          <h3>Getting Started</h3>
+          <p>Install the toolchain, set up the project template and build your first plugin DLL.</p>
+        </a>
+        <a class="card" href="architecture.html">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div>
+          <h3>Plugin Architecture</h3>
+          <p>The plugin interfaces (<code>IPlugin</code>, <code>IBot</code>, <code>IRoutine</code>…), lifecycle and the Tick rule.</p>
+        </a>
+        <a class="card" href="bot-loop.html">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></div>
+          <h3>The Bot Loop</h3>
+          <p>How <code>TaskManager</code>, <code>Coroutine</code> and <code>ITask</code> combine into a working bot.</p>
+        </a>
+        <a class="card" href="game-api.html">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg></div>
+          <h3>Game API</h3>
+          <p>Reading entities, pathfinding, input/skills and the UI panels (stash, atlas, vendor).</p>
+        </a>
+        <a class="card" href="api-discovery.html">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <h3>API Discovery</h3>
+          <p>Use the reflection dumper to inspect undocumented members of any DPB type.</p>
+        </a>
+        <a class="card" href="guides.html">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></div>
+          <h3>Patterns & Gotchas</h3>
+          <p>Hard-won lessons: coroutine rules, pathfinder reload, input hooks and anti-stuck logic.</p>
+        </a>
+      </div>
+
+      <h2 id="at-a-glance">DPB2 at a glance</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Concept</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pill pill--accent">Runtime</span></td><td>.NET 8 (WPF desktop app). Plugins target <code>net8.0-windows</code>.</td></tr>
+            <tr><td><span class="pill pill--accent">Namespaces</span></td><td>Core API under <code>DreamPoeBot.Loki.*</code> (such as <code>Loki.Game</code>, <code>Loki.Bot</code>, <code>Loki.Game.Objects</code>).</td></tr>
+            <tr><td><span class="pill pill--accent">Plugins</span></td><td>Precompiled <code>.dll</code> files. DPB loads every type implementing <code>IBase</code>.</td></tr>
+            <tr><td><span class="pill pill--accent">Entry point</span></td><td><code>LokiPoe</code>, the static gateway to all game state and input.</td></tr>
+            <tr><td><span class="pill pill--accent">Loop</span></td><td><code>Tick()</code> runs every ~30&nbsp;ms; actions run inside coroutines, not in Tick.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="plugin-types">Plugin types you can build</h2>
+      <p>DPB2 discovers and loads any type that implements one of these top-level interfaces:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Interface</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><code>IBot</code></td><td>A full bot, owns the task loop and decides what the character does.</td></tr>
+            <tr><td><code>IRoutine</code></td><td>A pluggable combat/skill routine, invoked by bots via <code>RoutineManager</code>.</td></tr>
+            <tr><td><code>IPlayerMover</code></td><td>Movement strategy (click-to-move, WASD…) used through <code>PlayerMoverManager</code>.</td></tr>
+            <tr><td><code>IPlugin</code></td><td>A general add-on with its own settings UI, lifecycle and logic hook.</td></tr>
+            <tr><td><code>IContent</code></td><td>Content provider managed by <code>ContentManager</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="page-nav">
+        <span></span>
+        <a class="next" href="getting-started.html">
+          <span>Next</span>
+          <strong>Getting Started →</strong>
+        </a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

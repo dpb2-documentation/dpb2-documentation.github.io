@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plugin Architecture · DPB2 Documentation</title>
+  <meta name="description" content="The DPB2 plugin interfaces, their lifecycle, the Tick() rule, and how settings & UI are wired.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Core Concepts</span>
+      <h1>Plugin Architecture</h1>
+      <p class="lead">The interfaces DPB2 looks for, how it composes them, the lifecycle each one follows,
+        and the all-important <code>Tick()</code> contract.</p>
+
+      <h2 id="ibase">Everything is an IBase</h2>
+      <p>DPB2 discovers plugins by scanning your DLLs for concrete types that implement <code>IBase</code>.
+        Every loadable component, bots, routines, movers, plugins, content, ultimately derives from it.
+        <code>IBase</code> provides the two fundamental lifecycle calls:</p>
+      <pre><code class="language-csharp">public interface IBase
+{
+    void Initialize();    // called once when the component is loaded
+    void Deinitialize();  // called once when it is unloaded
+}</code></pre>
+      <p>Most components also implement <code>IAuthored</code> (Name / Author / Description / Version) and
+        <code>IEnableable</code> (Enable / Disable), plus a <code>Tick()</code> method discussed below.</p>
+
+      <h2 id="component-types">Component types</h2>
+      <p>There is no built-in <code>IBot</code>, <code>IRoutine</code> or <code>IPlayerMover</code> shipped inside
+        the core DLL, you (or a community plugin) provide them. Each plays a distinct role:</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Interface</th><th>Responsibility</th><th>Selected via</th></tr></thead>
+          <tbody>
+            <tr><td><code>IBot</code></td><td>The brain. Owns the main loop and drives the character.</td><td>Bot dropdown</td></tr>
+            <tr><td><code>IRoutine</code></td><td>Combat / skill logic, called by the bot through <code>RoutineManager.Current</code>.</td><td>Routine dropdown</td></tr>
+            <tr><td><code>IPlayerMover</code></td><td>Movement implementation, used through <code>PlayerMoverManager.Current</code>.</td><td>Mover dropdown</td></tr>
+            <tr><td><code>IPlugin</code></td><td>General add-on with settings UI + logic hook (overlays, scanners, helpers).</td><td>Plugins list</td></tr>
+            <tr><td><code>IContent</code></td><td>Content provider managed by <code>ContentManager</code>.</td><td>None</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="iplugin">Anatomy of an IPlugin</h2>
+      <p><code>IPlugin</code> is a composite of several small interfaces. Implementing it means satisfying all of them:</p>
+      <div class="def">
+        <div class="def__head">IPlugin = IConfigurable + IMessageHandler + IAuthored + IBase + IEnableable + ILogicProvider</div>
+        <div class="def__body">
+          <ul>
+            <li><code>IConfigurable</code>, exposes <code>UserControl Control</code> (a WPF settings panel) and
+              <code>JsonSettings Settings</code>.</li>
+            <li><code>IMessageHandler</code>, <code>MessageResult Message(Message message)</code> for the
+              event/message bus.</li>
+            <li><code>IAuthored</code>, <code>Name</code>, <code>Author</code>, <code>Description</code>, <code>Version</code>.</li>
+            <li><code>IBase</code>, <code>Initialize()</code> / <code>Deinitialize()</code>.</li>
+            <li><code>IEnableable</code>, <code>Enable()</code> / <code>Disable()</code>.</li>
+            <li><code>ILogicProvider</code>, <code>Task&lt;LogicResult&gt; Logic(Logic logic)</code>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">A plugin's Logic() is not auto-pumped</span>
+          <p>The <code>PluginManager</code> has Start/Stop/Tick/Enable/Disable but no obvious Logic pump, a plain
+            plugin's <code>Logic()</code> may not be called for you. Drive plugin behaviour from its UI, from
+            <code>Message()</code>, or have a bot/task call into it. For self-contained background work, do it from
+            <code>Tick()</code> (flags only) plus a coroutine you own.</p>
+        </div>
+      </div>
+
+      <h2 id="lifecycle">Lifecycle</h2>
+      <p>For an enabled <code>IPlugin</code>, the order of calls is:</p>
+      <pre><code class="language-text">Initialize()  →  Enable()  →  Tick() … Tick() … (every ~30 ms)  →  Disable()  →  Deinitialize()</code></pre>
+      <ul>
+        <li><strong>Initialize</strong>, one-time setup. A common pattern is to assign a static
+          <code>Instance</code> here so your WPF UI can call back into the plugin.</li>
+        <li><strong>Enable / Disable</strong>, toggled when the user enables the component or stops the bot.
+          Acquire/release runtime resources here.</li>
+        <li><strong>Tick</strong>, the high-frequency heartbeat (see below).</li>
+        <li><strong>Deinitialize</strong>, final teardown on unload.</li>
+      </ul>
+
+      <h2 id="tick-rule">The Tick() rule</h2>
+      <p>The <code>TaskManager</code> ticks at roughly <strong>30&nbsp;ms</strong> and propagates <code>Tick()</code>
+        to every component. So every <code>IBot</code> / <code>IPlugin</code> / <code>IRoutine</code> /
+        <code>IPlayerMover</code> / <code>IContent</code> must implement <code>public void Tick()</code>, and it
+        runs ~33 times a second.</p>
+
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Tick() is for control logic only, never actions</span>
+          <p>Use <code>Tick()</code> to <strong>set flags, collect object info and do calculations</strong>
+            (reading a hotkey is borderline-OK). Do <strong>not</strong> press keys, click, interact or move in
+            <code>Tick()</code>. All actions belong in the coroutine / <code>Run()</code> / <code>Logic()</code> flow.</p>
+        </div>
+      </div>
+
+      <p>The idiomatic split:</p>
+      <ul>
+        <li><code>ITask</code> and <code>IPlayerMover</code> <code>Tick()</code> bodies usually stay empty.</li>
+        <li>The <code>IBot</code>'s <code>Tick()</code> may read a hotkey and set a flag, then pump its own main
+          coroutine, where the real actions run.</li>
+      </ul>
+
+      <pre><code class="language-csharp">// Reading a pause hotkey in the IBot's Tick() is compliant:
+// GetAsyncKeyState reads the physical key regardless of window focus,
+// it only SETS a flag here, the action happens elsewhere.
+public void Tick()
+{
+    if ((GetAsyncKeyState(Keys.B) &amp; 0x8000) != 0 &amp;&amp; AltHeld())
+        TogglePause();   // just flips a bool
+}</code></pre>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Pause done right</span>
+          <p>A robust pause toggles <code>LokiPoe.ProcessHookManager.Disable()</code> on pause (bot stops
+            injecting input → full manual control) and <code>Enable()</code> on resume. Because
+            <code>GetAsyncKeyState</code> reads physical keys independent of the hook, your resume hotkey still
+            works even while injection is disabled.</p>
+        </div>
+      </div>
+
+      <h2 id="settings">Settings &amp; UI</h2>
+      <p>Persisted settings use <code>JsonSettings</code>. The canonical pattern is a singleton settings class
+        bound to a WPF <code>UserControl</code> via <code>DataContext</code>, with a static <code>Instance</code>
+        set in <code>Initialize()</code> so the UI can call back into the plugin.</p>
+      <pre><code class="language-csharp">public sealed class MyPluginSettings : JsonSettings
+{
+    private static MyPluginSettings _instance;
+    public static MyPluginSettings Instance =&gt;
+        _instance ?? (_instance = new MyPluginSettings());
+
+    private MyPluginSettings() : base(GetSettingsFilePath(
+        Configuration.Instance.Name, "MyPluginSettings.json")) { }
+
+    private int _scanRadius = 60;
+    public int ScanRadius
+    {
+        get =&gt; _scanRadius;
+        set { _scanRadius = value; NotifyPropertyChanged(() =&gt; ScanRadius); }
+    }
+}</code></pre>
+      <p>Bind it in XAML:</p>
+      <pre><code class="language-xml">&lt;UserControl ...
+    DataContext="{x:Static local:MyPluginSettings.Instance}"&gt;
+  &lt;StackPanel&gt;
+    &lt;TextBox Text="{Binding ScanRadius}" /&gt;
+  &lt;/StackPanel&gt;
+&lt;/UserControl&gt;</code></pre>
+
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Some builds have no settings tab</span>
+          <p>On builds where the window exposes no settings tabs (only the Bot/Routine/Mover dropdowns,
+            Render and Start), neither <code>IBot.Control</code> nor <code>IPlugin.Control</code> surfaces.
+            Tune everything by editing the JSON directly at
+            <code>Settings\&lt;config&gt;\&lt;Name&gt;Settings.json</code> with DPB <strong>closed</strong>, it
+            loads settings on start and saves them on exit, so edits made while it runs are overwritten.</p>
+        </div>
+      </div>
+
+      <h2 id="messages">The message bus</h2>
+      <p>DPB2 routes events through <code>Message()</code>. Messages are processed on the main coroutine thread,
+        in a defined order: <code>ContentManager.Contents</code> → <code>RoutineManager.Current</code> →
+        <code>PlayerMoverManager.Current</code> → <code>PluginManager.EnabledPlugins</code>. Keep
+        <code>Message()</code> handlers cheap, do not run long calculations there. A typical use is reacting to
+        an <em>area changed</em> message to reset per-area state.</p>
+
+      <div class="page-nav">
+        <a class="prev" href="getting-started.html"><span>Previous</span><strong>← Getting Started</strong></a>
+        <a class="next" href="bot-loop.html"><span>Next</span><strong>The Bot Loop →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

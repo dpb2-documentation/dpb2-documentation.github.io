@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started · DPB2 Documentation</title>
+  <meta name="description" content="Install the .NET 8 toolchain, set up the DPB2 plugin template, and build & deploy your first plugin DLL.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Introduction</span>
+      <h1>Getting Started</h1>
+      <p class="lead">Set up the toolchain, scaffold a project from the official template, and build your
+        first DPB2 plugin into a deployable DLL.</p>
+
+      <h2 id="how-plugins-work">How plugins work</h2>
+      <p>DPB2 does <strong>not</strong> compile plugins from source, source-loading is not planned. You compile
+        a <code>.dll</code> yourself and drop it into the bot's <code>Plugins</code> folder. On launch, DPB scans
+        those DLLs and instantiates every type that implements <code>IBase</code> (so any <code>IBot</code>,
+        <code>IRoutine</code>, <code>IPlugin</code>, <code>IPlayerMover</code> or <code>IContent</code>).</p>
+
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Folder name must match the DLL</span>
+          <p>The plugin must live at <code>Plugins\&lt;Name&gt;\&lt;Name&gt;.dll</code>, the folder name has to
+            match the DLL name exactly, or DPB will not load it.</p>
+        </div>
+      </div>
+
+      <h2 id="prerequisites">Prerequisites</h2>
+      <ul>
+        <li>A working <strong>DPB2</strong> installation (this guide references <code>v0.4.5.x</code>).</li>
+        <li>The <strong>.NET 8 SDK</strong>, required to build <code>net8.0-windows</code> assemblies.</li>
+        <li>An IDE: Visual Studio 2022, JetBrains Rider, or VS Code with the C# Dev Kit.</li>
+        <li>Windows. The bot is a WPF desktop application.</li>
+      </ul>
+
+      <h3 id="install-dotnet">Install the .NET 8 SDK</h3>
+      <p>The quickest route on Windows is winget:</p>
+      <pre><code class="language-powershell">winget install Microsoft.DotNet.SDK.8</code></pre>
+      <p>Verify it is available. If <code>dotnet</code> is not on <code>PATH</code> for a fresh shell, call it
+        with the full path:</p>
+      <pre><code class="language-powershell"># typical install location
+&amp; "C:\Program Files\dotnet\dotnet.exe" --version</code></pre>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Pather server prerequisite</span>
+          <p>If the pathfinding ("pather") server fails to start, install <strong>both x86 and x64</strong>
+            .NET Core 8.0.8+ runtimes. Also disable any <em>High DPI override</em> on the DPB executable, because
+            Windows display scaling causes missclicks and broken navigation.</p>
+        </div>
+      </div>
+
+      <h2 id="env-var">Point your project at the DLL</h2>
+      <p>Plugins reference <code>DreamPoeBot.dll</code> from your DPB install. The cleanest approach is an
+        environment variable that your <code>.csproj</code> reads, so the path is not hard-coded:</p>
+      <pre><code class="language-powershell"># set a user environment variable (run once, then restart your shell/IDE)
+setx DPB2 "E:\DPB2 v04301\DPB2"</code></pre>
+      <p>Your project then resolves references through <code>$(DPB2)</code>:</p>
+      <pre><code class="language-xml">&lt;ItemGroup&gt;
+  &lt;Reference Include="DreamPoeBot"&gt;
+    &lt;HintPath&gt;$(DPB2)\DreamPoeBot.dll&lt;/HintPath&gt;
+    &lt;Private&gt;false&lt;/Private&gt;
+  &lt;/Reference&gt;
+&lt;/ItemGroup&gt;</code></pre>
+      <p><code>&lt;Private&gt;false&lt;/Private&gt;</code> prevents the bot's own DLLs from being copied into your
+        output, you only want to ship <em>your</em> assembly.</p>
+
+      <h2 id="template">Use the official template</h2>
+      <p>There is an official <code>dotnet new</code> template that scaffolds a correct project (references to
+        DreamPoeBot, log4net, MahApps.Metro and Newtonsoft.Json; <code>net8.0-windows</code> with
+        <code>UseWPF</code> + <code>UseWindowsForms</code> enabled):</p>
+      <div class="def">
+        <div class="def__head">github.com/Letale-vc/DPB2Plugintemplate</div>
+        <div class="def__body">
+          <p>Install the template, then create a new plugin project from it. The csproj includes a
+            <code>CopyToPlugins</code> flag that automatically copies the built DLL into
+            <code>$(DPB2)\Plugins\&lt;ProjectName&gt;</code> after each build, so a build is also a deploy.</p>
+        </div>
+      </div>
+      <pre><code class="language-powershell"># install the template package, then scaffold a project
+dotnet new install Letale-vc.DPB2Plugintemplate
+dotnet new dpb2plugin -n MyFirstPlugin</code></pre>
+
+      <h2 id="build-deploy">Build &amp; deploy</h2>
+      <p>Build in Release. With <code>CopyToPlugins</code> enabled, the DLL lands in the right folder automatically:</p>
+      <pre><code class="language-powershell">dotnet build -c Release</code></pre>
+      <p>Without the auto-copy flag, deploy manually, remember the folder/DLL name rule:</p>
+      <pre><code class="language-text">E:\DPB2 v04301\DPB2\Plugins\
+└── MyFirstPlugin\
+    └── MyFirstPlugin.dll   ← folder name == dll name</code></pre>
+
+      <ol class="steps">
+        <li>
+          <h3>Close DPB2 before deploying</h3>
+          <p>DPB loads plugins on startup and writes settings on exit. Replacing a DLL while it is running
+            can fail or load a stale copy. Build → close DPB → confirm the DLL copied → relaunch.</p>
+        </li>
+        <li>
+          <h3>Select your plugin in the UI</h3>
+          <p>An <code>IBot</code> appears in the bot dropdown, an <code>IRoutine</code> in the routine dropdown,
+            and an <code>IPlayerMover</code> in the mover dropdown. A plain <code>IPlugin</code> is enabled in
+            the plugins list.</p>
+        </li>
+        <li>
+          <h3>Check the log</h3>
+          <p>The DPB log window reports load errors, exceptions and your own <code>Log.*</code> output. It is
+            your primary debugging tool, most problems show up here first.</p>
+        </li>
+      </ol>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Settings live in JSON</span>
+          <p>Some DPB2 builds expose no settings tab in the window. In that case, tune your plugin by editing
+            its JSON directly at <code>Settings\&lt;config&gt;\&lt;Name&gt;Settings.json</code> (default config is
+            <code>Default</code>) while DPB is closed. See <a href="architecture.html#settings">Settings &amp; UI</a>.</p>
+        </div>
+      </div>
+
+      <h2 id="enable-docs">Enable IntelliSense docs</h2>
+      <p>Keep <code>DreamPoeBot.xml</code> next to the referenced <code>DreamPoeBot.dll</code> in your install
+        folder. Your IDE will then surface the framework's XML documentation (Coroutines, Pathfinding,
+        ObjectManager…) as IntelliSense tooltips.</p>
+
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">The XML only documents helpers</span>
+          <p><code>DreamPoeBot.xml</code> documents the framework <em>helpers</em> well, but <strong>not</strong>
+            entity property members, those exist only in the DLL metadata. To discover them, use the
+            <a href="api-discovery.html">reflection dumper</a>.</p>
+        </div>
+      </div>
+
+      <div class="page-nav">
+        <a class="prev" href="index.html"><span>Previous</span><strong>← Overview</strong></a>
+        <a class="next" href="architecture.html"><span>Next</span><strong>Plugin Architecture →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

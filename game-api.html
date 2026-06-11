@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game API · DPB2 Documentation</title>
+  <meta name="description" content="The DPB2 game API: LokiPoe gateway, ObjectManager, the entity hierarchy, pathfinding with ExilePather, input & skills, and the UI panels.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Reference</span>
+      <h1>Game API</h1>
+      <p class="lead">The core of DPB2: reading the world through <code>LokiPoe</code>, the entity hierarchy,
+        pathfinding, sending input and skills, and driving the in-game UI.</p>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Namespaces</span>
+          <p>Most of the API lives under <code>DreamPoeBot.Loki.*</code>. Notable exceptions:
+            <code>Vector2i</code> is in <code>DreamPoeBot.Common</code> (not <code>Loki.Common</code>);
+            <code>Skill</code> is in <code>DreamPoeBot.Loki.RemoteMemoryObjects</code>;
+            <code>Rarity</code> is in <code>DreamPoeBot.Loki.Game.GameData</code>; and <code>Keys</code> is just
+            <code>System.Windows.Forms.Keys</code>.</p>
+        </div>
+      </div>
+
+      <h2 id="lokipoe">LokiPoe, the gateway</h2>
+      <p><code>LokiPoe</code> is the static entry point to all game state and input. The members you reach for constantly:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Member</th><th>Returns / does</th></tr></thead>
+          <tbody>
+            <tr><td><code>LokiPoe.IsInGame</code></td><td><code>bool</code>, your primary guard. Check it before touching game state.</td></tr>
+            <tr><td><code>LokiPoe.Me</code></td><td>The <code>LocalPlayer</code> (your character).</td></tr>
+            <tr><td><code>LokiPoe.CurrentWorldArea</code></td><td>The current <code>DatWorldAreaWrapper</code> (area metadata).</td></tr>
+            <tr><td><code>LokiPoe.LocalData.AreaHash</code></td><td><code>uint</code> instance hash, changes when you enter a new area instance.</td></tr>
+            <tr><td><code>LokiPoe.ObjectManager</code></td><td>Access to all loaded world objects.</td></tr>
+            <tr><td><code>LokiPoe.InstanceInfo</code></td><td>Per-instance state, monsters remaining, map completion, league mechanics.</td></tr>
+            <tr><td><code>LokiPoe.InGameState</code></td><td>The UI panels, skill bar, stash, atlas, vendor, etc.</td></tr>
+            <tr><td><code>LokiPoe.Input</code></td><td>Mouse/keyboard input injection.</td></tr>
+            <tr><td><code>LokiPoe.ProcessHookManager</code></td><td>Enable/disable input injection (<code>Enable()</code> / <code>Disable()</code> / <code>IsEnabled</code>).</td></tr>
+            <tr><td><code>LokiPoe.Random</code></td><td>Seeded RNG, <code>Next(min, max)</code> for humanized delays.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="objectmanager">ObjectManager, reading the world</h2>
+      <p>Query loaded entities by type. The most common call:</p>
+      <pre><code class="language-csharp">// every alive, hostile, targetable monster within range
+var monsters = LokiPoe.ObjectManager
+    .GetObjectsByType&lt;Monster&gt;()
+    .Where(m =&gt; m.IsAliveHostile &amp;&amp; m.IsTargetable
+             &amp;&amp; m.Distance &lt;= combatRange);
+
+// other lookups
+var device  = LokiPoe.ObjectManager.GetObjectByName&lt;NetworkObject&gt;("...");
+var byId    = LokiPoe.ObjectManager.GetObjectById&lt;WorldItem&gt;(id);
+var chests  = LokiPoe.ObjectManager.GetObjectsByType&lt;Chest&gt;();
+var items   = LokiPoe.ObjectManager.GetObjectsByType&lt;WorldItem&gt;();</code></pre>
+
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Performance: LINQ is expensive on big maps</span>
+          <p>The <code>ObjectManager</code> is a snapshot dictionary of <code>id → address</code>; <em>every</em>
+            property access reads from memory. Chaining <code>Where</code>/<code>OrderBy</code> over large object
+            sets is slow, <code>OrderBy</code> especially. Pull objects once per tick, cache the props you need,
+            and skip already-processed ids (object <code>Id</code> is unique per zone). Do one action per cycle
+            and return.</p>
+        </div>
+      </div>
+
+      <h2 id="entity-hierarchy">The entity hierarchy</h2>
+      <p>World entities form an inheritance chain. The base members exist everywhere; the richer ones appear as
+        you go down the tree.</p>
+
+      <div class="def">
+        <div class="def__head">NetworkObject</div>
+        <div class="def__body">
+          <p>Base for everything in the world. <code>Name</code>, <code>Position</code> (<code>Vector2i</code>),
+            <code>Distance</code>, <code>Id</code>, <code>Metadata</code>, <code>Reaction</code>,
+            <code>IsHostile</code>, <code>IsTargetable</code>, <code>Components</code>,
+            <code>Entity</code> (an <code>EntityWrapper</code> with <code>.Address</code>).</p>
+        </div>
+      </div>
+      <div class="def">
+        <div class="def__head">Actor : NetworkObject</div>
+        <div class="def__body">
+          <p>Anything alive. <code>Health</code>, <code>MaxHealth</code>, <code>HealthPercent</code>,
+            <code>Mana</code>, <code>IsDead</code>, <code>HasBuff</code>, <code>HasAura(string)</code>,
+            <code>GetStat(...)</code>, <code>GetSkill(...)</code>, <code>CannotDie</code>, <code>Invincible</code>,
+            <code>HasProximityShield</code>. Action state: <code>CurrentAction</code> (an
+            <code>ActionWrapper</code> with <code>Skill</code> / <code>Target</code> / <code>Destination</code>),
+            <code>HasCurrentAction</code>, <code>IsUsingAbility</code>, <code>IsTargetingMe</code>,
+            <code>TimeSinceLastAction</code>.</p>
+        </div>
+      </div>
+      <div class="def">
+        <div class="def__head">Player : Actor &nbsp;→&nbsp; LocalPlayer : Player</div>
+        <div class="def__body">
+          <p><code>LocalPlayer</code> (= <code>LokiPoe.Me</code>) adds <code>IsInTown</code>,
+            <code>IsInHideout</code>, <code>EquippedItems</code>, <code>TownPortal</code>, <code>Auras</code>.</p>
+        </div>
+      </div>
+      <div class="def">
+        <div class="def__head">Monster : Actor</div>
+        <div class="def__body">
+          <p><code>Rarity</code>, <code>Level</code>, <code>IsAliveHostile</code>, <code>IsMapBoss</code>,
+            <code>Tags</code>. Use <code>IsMapBoss</code> to identify the real boss, not every
+            <code>Rarity == Unique</code> monster (roaming unique exiles are not the map boss).</p>
+        </div>
+      </div>
+
+      <h2 id="instance-info">Map / instance state</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Member</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>InstanceInfo.IsMapCompleted</code></td><td>Reliable when <code>true</code> (objective/boss done). Can stay <code>false</code> at 100% explored if the objective isn't met.</td></tr>
+            <tr><td><code>InstanceInfo.MonstersRemaining</code></td><td>Count of remaining monsters, but it includes inactive statue-monsters, so it can stay high forever. Don't gate completion on a low value alone.</td></tr>
+            <tr><td><code>InstanceInfo.MinimapIcons</code></td><td>The generic mechanic detector, see below.</td></tr>
+            <tr><td><code>InstanceInfo.Ritual / Breach / Delirium</code></td><td>Per-mechanic instance state.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">MinimapIcons: the generic mechanic finder</span>
+          <p><code>InstanceInfo.MinimapIcons</code> is a list of <code>MinimapIconWrapper</code>
+            (<code>ObjectId</code>, <code>MinimapIcon.Name</code>, <code>LastSeenPosition</code>). The icon
+            <em>name</em> identifies content generically, e.g. <code>"Strongbox"</code>, <code>"Essence"</code>,
+            <code>"Ritual"</code>, <code>"Delirium"</code>, <code>"AbyssPitActive"</code>,
+            <code>"Rare"</code>/<code>"Unique"</code>/<code>"Boss"</code>. This avoids guessing metadata strings
+            for every mechanic.</p>
+        </div>
+      </div>
+
+      <h2 id="pathfinding">Pathfinding, ExilePather</h2>
+      <p><code>ExilePather</code> is the navmesh. The core call returns a <code>PathResult</code> struct
+        (in <code>…Pathfinding.RDWrapper.Types</code>) with <code>.Success</code> and <code>.Path</code>
+        (a <code>List&lt;Vector2i&gt;</code>):</p>
+      <pre><code class="language-csharp">// start, end, useWaypoints, hops
+PathResult path = ExilePather.FindPath(
+    LokiPoe.Me.Position, target, true, 5);
+
+if (path.Success)
+{
+    foreach (var wp in path.Path) { /* walk toward wp */ }
+}</code></pre>
+
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Reload the pather once per area</span>
+          <p>Before any pathing or explorer use in a new area you must call <code>ExilePather.Reload(true)</code>
+            (synchronous) once, or you get <em>"Cannot use PathExistsBetween before Reload is called."</em> Guard
+            it on a saved <code>AreaHash</code> and gate the rest of your logic on <code>ExilePather.IsReady</code>.
+            Do not <code>await</code> the async reload from inside a coroutine.</p>
+        </div>
+      </div>
+
+      <p>Other useful ExilePather members:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Member</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>IsWalkable(Vector2i)</code></td><td>Is this cell walkable?</td></tr>
+            <tr><td><code>CanObjectSee(from, to, out _, false, useRangedMap)</code></td><td>Line-of-sight check (internally a raycast). Pass <code>true</code> for the ranged map, ideal for ranged builds.</td></tr>
+            <tr><td><code>GetPointsOnSegment(start, end, dontLeaveFrame)</code></td><td>Waypoints along a straight segment.</td></tr>
+            <tr><td><code>DistanceToWall(pos, maxR)</code> / <code>FastWalkablePositionFor(pos, range)</code></td><td>Wall proximity / nearest walkable point.</td></tr>
+            <tr><td><code>AddCircleObstacle / AddBoxObstacle / ClearObstacles / SignalObstacleUpdate</code></td><td>Inject dynamic obstacles so <code>FindPath</code> routes around a spot. Obstacles are per-map, clear them on area change.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="explorer">GridExplorer</h3>
+      <p>The built-in <code>IExplorer</code> tracks discovered tiles and hands you the next place to go:</p>
+      <pre><code class="language-csharp">var explorer = new GridExplorer { AutoResetOnAreaChange = true };
+explorer.Start();
+// each tick (gated on ExilePather.IsReady):
+explorer.Tick();
+if (explorer.HasLocation)
+    PlayerMoverManager.MoveTowards(explorer.Location);
+double pct = explorer.PercentComplete;
+explorer.Ignore(badLocation);   // give up on a point you can't reach</code></pre>
+
+      <h2 id="movement">Movement</h2>
+      <p>Movement goes through <code>PlayerMoverManager.Current.MoveTowards(Vector2i, ...)</code>, which calls
+        into the selected <code>IPlayerMover</code>. A mover implements:</p>
+      <pre><code class="language-csharp">public interface IPlayerMover // (+ IBase, IAuthored, etc.)
+{
+    PathResult? CurrentCommand { get; }
+    bool MoveTowards(Vector2i destination, params object[] args);
+}</code></pre>
+      <p>Click-to-move requires the <strong>Move skill</strong> bound on the skill bar
+        (<code>LokiPoe.InGameState.SkillBarHud.LastBoundMoveSkill</code>). PoE2 also supports WASD movement
+        (<code>LokiPoe.Input.CurrentInputMethod == InputMethod.WASD</code>), which frees the mouse to aim, useful
+        for ranged kiting, but it requires the game itself to be set to the WASD control scheme.</p>
+
+      <h2 id="input-skills">Input &amp; skills</h2>
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Enable the hook first</span>
+          <p>Call <code>LokiPoe.ProcessHookManager.Enable()</code> once in <code>Start()</code>, or <code>UseAt</code>/<code>UseOn</code> return
+            <code>ProcessHookManagerNotEnabled</code>. Call it <strong>once</strong>, repeatedly enabling it
+            balloons the main loop to ~800–1000&nbsp;ms; once-only keeps it ~200&nbsp;ms.</p>
+        </div>
+      </div>
+
+      <p>Use a skill via the skill bar (<code>SkillBarHud</code>). Results are a <code>UseResult</code> enum where
+        <code>None</code> means success:</p>
+      <pre><code class="language-csharp">var bar = LokiPoe.InGameState.SkillBarHud;
+
+// cast at a target object
+bar.UseOn(slot, /*inPlace*/ false, monster, /*clearKeys*/ true);
+
+// cast at a world position
+bar.UseAt(slot, false, point, true);
+
+// HELD / continuous fire: BeginUseAt with clearKeys = false, and do NOT
+// call ClearAllKeyStates between shots, that breaks channeling/held-fire.
+bar.BeginUseAt(slot, /*inPlace*/ true, point, /*clearKeys*/ false);
+
+// find a skill by its bound mouse button, then read its slot
+var left = bar.Skills.FirstOrDefault(s =&gt; s.BoundKey == Keys.LButton);
+int slot = left.Slot;</code></pre>
+
+      <p>Lower-level input through <code>LokiPoe.Input</code>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Call</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>SimulateKeyEvent(Keys.Space, true, false, true, Keys.None)</code></td><td>Tap a key (down + up), e.g. a dodge roll. Press = (down:true, up:false); release = (down:false, up:true).</td></tr>
+            <tr><td><code>MoveMouseToWorldPos("…", point)</code></td><td>Aim the mouse at a world position (keeps a held move-key going).</td></tr>
+            <tr><td><code>ClickLMB / ClickRMB</code></td><td>Mouse clicks.</td></tr>
+            <tr><td><code>ProcessHookManager.ClearAllKeyStates()</code></td><td>Release all held keys. Use it before a dodge, never between held-fire shots.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Humanize timings</span>
+          <p>Use <code>LokiPoe.Random.Next(min, max)</code> (good seeded RNG) for delays. Generate a value, store
+            it, and regenerate it <em>after</em> the action, not every tick.</p>
+        </div>
+      </div>
+
+      <h2 id="items">Items &amp; loot</h2>
+      <p>Ground loot is <code>WorldItem</code>; inventory/stash entries are <code>Item</code>. Interact via the
+        framework coroutine <code>Coroutines.InteractWith(worldItem, false)</code> (awaitable directly).</p>
+      <pre><code class="language-csharp">var loot = LokiPoe.ObjectManager.GetObjectsByType&lt;WorldItem&gt;()
+    .Where(w =&gt; w.HasVisibleHighlightLabel   // passes the in-game item filter
+             &amp;&amp; w.IsTargetable
+             &amp;&amp; w.Distance &lt;= lootRange);</code></pre>
+      <p><code>Item</code> exposes rich data: <code>Name</code>, <code>Class</code>, <code>Metadata</code>,
+        <code>Rarity</code>, <code>StackCount</code>, <code>LocalId</code>, <code>ItemLevel</code>,
+        <code>Quality</code>, affixes (<code>ExplicitAffixes</code> / <code>ImplicitAffixes</code>, each a
+        <code>ModAffix</code> with <code>InternalName</code>, <code>IsPrefix</code>, <code>Values</code>…),
+        and defensive/weapon stats (<code>ArmorValue</code>, <code>MaxDps</code>, …).</p>
+
+      <div class="callout callout--danger">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Guard every item property read</span>
+          <p><code>Item.Name</code>, <code>Item.Class</code> and <code>Item.Rarity</code> can throw
+            <em>"BaseItemType not found"</em> for some ground items, and
+            <code>HasVisibleHighlightLabel</code> can throw <code>NullReferenceException</code>. Wrap all item
+            reads in try/catch, an unguarded read inside a LINQ <code>Where</code> crashes the whole task.</p>
+        </div>
+      </div>
+
+      <h2 id="ui-panels">UI panels</h2>
+      <p>UI panels hang off <code>LokiPoe.InGameState</code> and are mostly <strong>static</strong> classes, so
+        you access their members directly and can't instantiate them.</p>
+
+      <h3 id="stash">Stash</h3>
+      <pre><code class="language-csharp">var stash = LokiPoe.InGameState.StashUi;          // also GuildStashUi
+bool open = stash.IsOpened;
+var names = stash.TabControl.TabNames;            // List&lt;string&gt;
+stash.TabControl.SwitchToTabMouse("CURRENCY");    // returns None on SUCCESS
+var ctrl  = stash.InventoryControl;               // current tab grid
+// move an item between inventory and the open stash tab:
+ctrl.FastMove(item.LocalId, /*actuallyMove*/ true, /*ignoreIncubators*/ false);</code></pre>
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Re-fetch wrappers; special tabs differ</span>
+          <p>Don't cache an <code>InventoryControlWrapper</code>; re-fetch it each operation (the framework no
+            longer updates a held reference). Special-typed tabs (Currency / Map / Fragment) return a
+            <code>null</code> <code>InventoryControl</code> and need their dedicated reader classes
+            (<code>CurrencyTab</code>, <code>FragmentTab</code>). Generic tabs have a real
+            <code>InventoryControl</code> you can read and withdraw from. Wrap stash reads/switches in try/catch,
+            since empty normal tabs throw on read.</p>
+        </div>
+      </div>
+
+      <h3 id="atlas">Atlas &amp; map device</h3>
+      <p>PoE2 endgame is the Atlas. Interact the map device object, then drive <code>AtlasUi</code> (static):</p>
+      <pre><code class="language-csharp">var atlas = LokiPoe.InGameState.AtlasUi;
+if (atlas.IsOpened)
+{
+    var node = atlas.UsableAtlasNodes
+        .First(n =&gt; !n.IsCompleted &amp;&amp; n.CanBeUsed);
+    atlas.MoveToNode(node, 5000);
+    atlas.OpenNodeInventory(node);
+
+    var dev = LokiPoe.InGameState.AtlasUi.AtlasMapDeviceUi;
+    dev.Waystone_InventoryControl... // place a waystone via FastMove
+    dev.Traverse();                  // creates the map portal, then enter it
+}</code></pre>
+      <p>Newer builds (0.4.5.16+) made <code>AtlasNode</code> reliable and added
+        <code>AtlasUi.AtlasEndgameContentIcons</code> / <code>AtlasIslandsNodes</code> /
+        <code>AtlasTowerNodes</code>, each node has <code>Coordinate</code>, <code>FullTooltip</code>,
+        <code>Click()</code>, <code>IsInFOV(pct)</code> and <code>MoveTo(timeout)</code>.</p>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">A map run runs at the waystone's tier</span>
+          <p><code>AtlasNode.MinWaystoneTierRequired</code> is the node's <em>minimum accepted</em> waystone tier,
+            not the resulting map tier. The map runs at the tier of the waystone you place. Filter nodes by
+            <code>MinWaystoneTierRequired &gt; 0 &amp;&amp; &lt;= yourWaystoneTier</code>, not by a high minimum.</p>
+        </div>
+      </div>
+
+      <h3 id="vendor">Vendor &amp; dialog</h3>
+      <p>NPC interaction goes through <code>NpcDialogUi</code> (static): <code>CanConverse</code>,
+        <code>Converse</code>, <code>BuyorSellItems()</code>, <code>Goodbye()</code>. In PoE2, selling is done by
+        <code>FastMove</code>-ing the item to the open vendor window, which credits gold directly.</p>
+
+      <h3 id="other-panels">Other panels</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Panel</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>SkillBarHud</code></td><td>Skill slots, bound keys, the Move skill, and <code>UseOn</code>/<code>UseAt</code>/<code>BeginUseAt</code>.</td></tr>
+            <tr><td><code>InventoryUi</code></td><td>Player inventory grid (<code>InventoryControl_Main.Inventory.Items</code>).</td></tr>
+            <tr><td><code>ResurrectPanel</code></td><td><code>IsOpened</code> / <code>Resurrect()</code>, endgame death handling.</td></tr>
+            <tr><td><code>CurrencyExchangeUi</code></td><td>Read-only market ratios (static). Used by currency pricing tools.</td></tr>
+            <tr><td><code>WorldUi</code></td><td><code>GoToHideout()</code>, <code>TakeWaypoint(...)</code>, waypoints.</td></tr>
+            <tr><td><code>RitualFavorsUi</code> / <code>RuneshapeConbinationsUi</code></td><td>League-mechanic UIs (Ritual, Expedition runeshapes).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout--tip">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">When in doubt, dump it</span>
+          <p>The DLL metadata is the source of truth for entity and UI members. The
+            <a href="api-discovery.html">reflection dumper</a> lists the exact members of any DPB type without
+            executing the assembly, the fastest way to discover undocumented properties.</p>
+        </div>
+      </div>
+
+      <div class="page-nav">
+        <a class="prev" href="bot-loop.html"><span>Previous</span><strong>← The Bot Loop</strong></a>
+        <a class="next" href="api-discovery.html"><span>Next</span><strong>API Discovery →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

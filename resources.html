@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resources · DPB2 Documentation</title>
+  <meta name="description" content="Reference repositories, version history highlights and external links for DPB2 plugin development.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="layout">
+  <main class="main">
+    <div class="content">
+
+      <span class="eyebrow">Practical</span>
+      <h1>Resources</h1>
+      <p class="lead">Reference projects to learn from, version-history highlights worth knowing, and where to
+        get help.</p>
+
+      <h2 id="official-dreampoebot">Official DreamPoeBot</h2>
+      <p>The official home of DreamPoeBot. Download the bot, read the announcements, and get help from the
+        community and the developers.</p>
+      <div class="card-grid">
+        <a class="card" href="https://dreampoebot.com/" target="_blank" rel="noopener">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+          <h3>Website</h3>
+          <p>The official DreamPoeBot site, <code>dreampoebot.com</code>, for downloads, news and account access.</p>
+        </a>
+        <a class="card" href="https://discord.com/invite/ZCnuudbngp" target="_blank" rel="noopener">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.25.5a18.3 18.3 0 0 1 4.3 1.5c-2-1-4.6-1.7-7.45-1.7s-5.45.7-7.45 1.7c1.3-.7 2.8-1.2 4.3-1.5L8.6 3c-1.8.3-3.5.8-4.9 1.4C.9 8.9.1 13.3.5 17.6a20 20 0 0 0 6 3l.5-.7c-1-.3-2-.8-2.85-1.4.24.17.5.33.74.48a14.2 14.2 0 0 0 12.2 0l.74-.48c-.86.6-1.85 1.05-2.85 1.4l.5.7a20 20 0 0 0 6-3c.5-5-.78-9.4-2.92-13.2zM8.5 14.9c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg></div>
+          <h3>Discord</h3>
+          <p>The community Discord, the best place for questions, the changelog, dev tips and support.</p>
+        </a>
+      </div>
+
+      <h2 id="reference-projects">Reference projects</h2>
+      <p>The fastest way to learn DPB2's real API is to read working plugins. These call the same framework you
+        do, no porting required.</p>
+      <div class="card-grid">
+        <a class="card" href="https://github.com/Letale-vc/DPB2Plugintemplate" target="_blank" rel="noopener">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg></div>
+          <h3>DPB2 Plugin Template</h3>
+          <p>Official <code>dotnet new</code> template, the correct starting point for any new plugin.</p>
+        </a>
+        <a class="card" href="https://github.com/ElRatto/MP2-Bot-DPB-POE2-" target="_blank" rel="noopener">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg></div>
+          <h3>MP2 (ElRatto)</h3>
+          <p>A complete production DPB2/PoE2 mapper bot covering combat routines, the atlas loop, stash, loot and mechanics. The richest real-API reference.</p>
+        </a>
+        <a class="card" href="https://github.com/wDestiny-poe/SimpleBot-DPB2" target="_blank" rel="noopener">
+          <div class="card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+          <h3>SimpleBot-DPB2</h3>
+          <p>A starter project. Useful as a secondary reference, though parts are older and it lacks atlas map creation.</p>
+        </a>
+      </div>
+
+      <div class="callout callout--note">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Mind the version gap</span>
+          <p>Reference projects may target a different DPB2 build than yours. A newer bot can reference APIs your
+            build lacks (e.g. <code>ExpeditionUi</code>), and an older one can use members since removed. If a
+            reference doesn't compile against your DLL, repoint its <code>HintPath</code> and reconcile the
+            handful of changed members rather than assuming it's broken.</p>
+        </div>
+      </div>
+
+      <h2 id="version-history">Version-history highlights</h2>
+      <p>Knowing what changed when saves you from fighting a bug that's actually a known framework issue:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Version</th><th>Notable changes</th></tr></thead>
+          <tbody>
+            <tr><td><code>0.4.5.22</code></td><td>Fixed <code>GlobalWarningDialog</code> at the framework level (resolves the checkpoint-dialog freeze). Added <code>InventoryUi.IsTatuedRuneInventoryOpen</code> / <code>ClickTatuedRuneInventoryButton()</code>.</td></tr>
+            <tr><td><code>0.4.5.21</code></td><td>Re-added <code>Skill.CanUse</code>/<code>CanUseEx</code> (now reliable); fixed <code>InstanceInfo.RawZoneDescription</code>.</td></tr>
+            <tr><td><code>0.4.5.19–20</code></td><td><code>CanUse</code> grayed-out detection added then reverted ("need more data"). New <code>ExpeditionRemnant</code> + <code>RuneshapeConbinationsUi</code>.</td></tr>
+            <tr><td><code>0.4.5.16</code></td><td>Big Atlas update: <code>AtlasNode</code> became reliable, plus new node-icon tooltips and special/tower/island node lists.</td></tr>
+            <tr><td><code>0.4.5.15</code></td><td>Stash API: <code>CurrencyTab</code>/<code>FragmentTab</code> with <code>GetByName</code>/<code>GetByMetadata</code>. "A single <code>InventoryControlWrapper</code> is no longer updated", so re-fetch it each op.</td></tr>
+            <tr><td><code>0.4.5.12</code></td><td><code>WorldItem.HasVisibleHighlightLabel</code> (and the label functions) fixed; the filter-label loot path works from here.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="perf">Performance tips</h2>
+      <ul>
+        <li>Enable the input hook <strong>once</strong>, not per loop. It's the difference between a ~200&nbsp;ms
+          and a ~1000&nbsp;ms main loop.</li>
+        <li>Avoid chained LINQ (especially <code>OrderBy</code>) over large object sets. Pull once, cache by type,
+          skip processed ids, do one action per cycle.</li>
+        <li>Use a stopwatch CPU-limiter when scanning objects on big maps.</li>
+        <li>Keep <code>Message()</code> handlers cheap; they run on the main coroutine thread.</li>
+      </ul>
+
+      <h2 id="setup-tips">Operational tips</h2>
+      <ul>
+        <li>Keep <code>DreamPoeBot.xml</code> beside <code>DreamPoeBot.dll</code> for IntelliSense docs.</li>
+        <li>If the pather server fails, install <strong>both</strong> x86 and x64 .NET Core 8.0.8+ runtimes.</li>
+        <li>Disable High-DPI override on the DPB executable; Windows scaling breaks clicks and navigation.</li>
+        <li>Profiles: each folder under <code>Settings\</code> (besides <code>Global</code>) is a config profile.
+          Rename one with DPB closed to rename the profile.</li>
+        <li>Edit settings JSON only while DPB is closed, it loads on start and overwrites on exit.</li>
+      </ul>
+
+      <h2 id="disclaimer">Disclaimer</h2>
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Unofficial &amp; educational</span>
+          <p>This documentation is community-maintained and provided for educational purposes around the DPB2
+            plugin framework. It is not affiliated with the DreamPoeBot authors or Grinding Gear Games. Verify any
+            API detail against the live DLL metadata for your specific build, versions differ.</p>
+        </div>
+      </div>
+
+      <div class="page-nav">
+        <a class="prev" href="guides.html"><span>Previous</span><strong>← Patterns &amp; Gotchas</strong></a>
+        <a class="next" href="index.html"><span>Back to</span><strong>Overview →</strong></a>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
