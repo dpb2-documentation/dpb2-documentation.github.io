@@ -304,7 +304,10 @@ ctrl.FastMove(item.LocalId, /*actuallyMove*/ true, /*ignoreIncubators*/ false);<
             <code>null</code> <code>InventoryControl</code> and need their dedicated reader classes
             (<code>CurrencyTab</code>, <code>FragmentTab</code>). Generic tabs have a real
             <code>InventoryControl</code> you can read and withdraw from. Wrap stash reads/switches in try/catch,
-            since empty normal tabs throw on read.</p>
+            since empty normal tabs throw on read. The <code>FragmentTab</code> also exposes static
+            <code>Tablets</code> and <code>Trials</code> sub-classes (each with <code>InventoryControl</code>,
+            <code>TabControl</code>, <code>SelectSubCategory(...)</code> and <code>SelectedSubCategory()</code>)
+            for those sub-categories.</p>
         </div>
       </div>
 
@@ -326,6 +329,13 @@ if (atlas.IsOpened)
         <code>AtlasUi.AtlasEndgameContentIcons</code> / <code>AtlasIslandsNodes</code> /
         <code>AtlasTowerNodes</code>, each node has <code>Coordinate</code>, <code>FullTooltip</code>,
         <code>Click()</code>, <code>IsInFOV(pct)</code> and <code>MoveTo(timeout)</code>.</p>
+      <p>Recent builds expose richer node detail and atlas-tree allocation. <code>AtlasNodeIconElement</code>
+        now carries a <code>List&lt;ContentIcon&gt; Contents</code> (each <code>ContentIcon</code> has a
+        <code>ContentText</code> string like <code>"Delirium Fog"</code>), and <code>FullTooltip</code> is built
+        from that list rather than scraped from the tooltips. <code>AtlasNode</code> also gained
+        <code>CruxOfNothingnessBonus</code>. To spend atlas points, <code>AtlasSkillUi</code> can allocate
+        passives, including <code>ChoosePassiveMastery(int id, int acceptedMasteryId)</code> for masteries
+        (use <kbd class="kbd">Alt+Shift+A</kbd> in-game to dump mastery info).</p>
 
       <div class="callout callout--note">
         <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -352,6 +362,7 @@ if (atlas.IsOpened)
             <tr><td><code>ResurrectPanel</code></td><td><code>IsOpened</code> / <code>Resurrect()</code>, endgame death handling.</td></tr>
             <tr><td><code>CurrencyExchangeUi</code></td><td>Read-only market ratios (static). Used by currency pricing tools.</td></tr>
             <tr><td><code>WorldUi</code></td><td><code>GoToHideout()</code>, <code>TakeWaypoint(...)</code>, waypoints.</td></tr>
+            <tr><td><code>AtlasSkillUi</code></td><td>Allocate Atlas-tree passives, e.g. <code>ChoosePassiveMastery(id, acceptedMasteryId)</code>.</td></tr>
             <tr><td><code>RitualFavorsUi</code> / <code>RuneshapeConbinationsUi</code></td><td>League-mechanic UIs (Ritual, Expedition runeshapes).</td></tr>
           </tbody>
         </table>
