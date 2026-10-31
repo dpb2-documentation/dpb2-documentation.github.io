@@ -32,7 +32,7 @@
 
       <h2 id="what-is-dpb2">What is DPB2?</h2>
       <p><strong>DreamPoeBot 2 (DPB2)</strong> is an automation framework for <strong>Path of Exile 2</strong>,
-        built on .NET 8 and WPF. If you've worked with the original Exilebuddy, the API will feel familiar:
+        built on .NET 10 and WPF. If you've worked with the original Exilebuddy, the API will feel familiar:
         almost everything lives under the <code>DreamPoeBot.Loki.*</code> namespaces.
         DPB2 reads the game state straight from client memory (entities, health, the navmesh, the UI panels)
         and hands you that data through a broad API, so you can write your own bots and behaviours as <strong>precompiled .NET plugins</strong>.</p>
@@ -86,7 +86,7 @@
         <table>
           <thead><tr><th>Concept</th><th>What it is</th></tr></thead>
           <tbody>
-            <tr><td><span class="pill pill--accent">Runtime</span></td><td>.NET 8 (WPF desktop app). Plugins target <code>net8.0-windows</code>.</td></tr>
+            <tr><td><span class="pill pill--accent">Runtime</span></td><td>.NET 10 (WPF desktop app) since <code>v0.4.5.98</code>. Plugins target <code>net10.0-windows</code>.</td></tr>
             <tr><td><span class="pill pill--accent">Namespaces</span></td><td>Core API under <code>DreamPoeBot.Loki.*</code> (such as <code>Loki.Game</code>, <code>Loki.Bot</code>, <code>Loki.Game.Objects</code>).</td></tr>
             <tr><td><span class="pill pill--accent">Plugins</span></td><td>Precompiled <code>.dll</code> files. DPB loads every type implementing <code>IBase</code>.</td></tr>
             <tr><td><span class="pill pill--accent">Entry point</span></td><td><code>LokiPoe</code>, the static gateway to all game state and input.</td></tr>

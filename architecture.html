@@ -30,8 +30,9 @@
     void Initialize();    // called once when the component is loaded
     void Deinitialize();  // called once when it is unloaded
 }</code></pre>
-      <p>Most components also implement <code>IAuthored</code> (Name / Author / Description / Version) and
-        <code>IEnableable</code> (Enable / Disable), plus a <code>Tick()</code> method discussed below.</p>
+      <p>Every component type also implements <code>IAuthored</code> (Name / Author / Description / Version).
+        <code>IPlugin</code> adds <code>IEnableable</code> (Enable / Disable), and bots, routines, movers and
+        tasks get a <code>Tick()</code> method from <code>ITickEvents</code>, discussed below.</p>
 
       <h2 id="component-types">Component types</h2>
       <p>There is no built-in <code>IBot</code>, <code>IRoutine</code> or <code>IPlayerMover</code> shipped inside
@@ -74,13 +75,14 @@
           <span class="callout__title">A plugin's Logic() is not auto-pumped</span>
           <p>The <code>PluginManager</code> has Start/Stop/Tick/Enable/Disable but no obvious Logic pump, a plain
             plugin's <code>Logic()</code> may not be called for you. Drive plugin behaviour from its UI, from
-            <code>Message()</code>, or have a bot/task call into it. For self-contained background work, do it from
-            <code>Tick()</code> (flags only) plus a coroutine you own.</p>
+            <code>Message()</code>, or have a bot/task call into it. For self-contained background work, implement
+            <code>ITickEvents</code> on the plugin and use <code>Tick()</code> (flags only) plus a coroutine you own.</p>
         </div>
       </div>
 
       <h2 id="lifecycle">Lifecycle</h2>
-      <p>For an enabled <code>IPlugin</code>, the order of calls is:</p>
+      <p>For an enabled <code>IPlugin</code>, the order of calls is (the <code>Tick()</code> calls only happen
+        if the plugin also implements <code>ITickEvents</code>, see below):</p>
       <pre><code class="language-text">Initialize()  →  Enable()  →  Tick() … Tick() … (every ~30 ms)  →  Disable()  →  Deinitialize()</code></pre>
       <ul>
         <li><strong>Initialize</strong>, one-time setup. A common pattern is to assign a static
@@ -92,10 +94,13 @@
       </ul>
 
       <h2 id="tick-rule">The Tick() rule</h2>
-      <p>The <code>TaskManager</code> ticks at roughly <strong>30&nbsp;ms</strong> and propagates <code>Tick()</code>
-        to every component. So every <code>IBot</code> / <code>IPlugin</code> / <code>IRoutine</code> /
-        <code>IPlayerMover</code> / <code>IContent</code> must implement <code>public void Tick()</code>, and it
-        runs ~33 times a second.</p>
+      <p>The <code>BotManager</code> runs the tick loop on the bot thread, roughly every <strong>30&nbsp;ms</strong>
+        (the cadence is <code>BotManager.MsBetweenTicks</code>), so <code>Tick()</code> runs ~33 times a second.
+        <code>Tick()</code> comes from <code>ITickEvents</code>, which <code>IBot</code>, <code>IRoutine</code>,
+        <code>IPlayerMover</code> and <code>ITask</code> inherit, so each of them must implement
+        <code>public void Tick()</code>. <code>IPlugin</code> and <code>IContent</code> do not include it: the
+        <code>PluginManager</code> only ticks enabled plugins that also implement <code>ITickEvents</code>.
+        Your bot ticks its own <code>TaskManager</code>, which passes <code>Tick()</code> on to its tasks.</p>
 
       <div class="callout callout--danger">
         <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>

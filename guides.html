@@ -45,7 +45,7 @@
 {
     ExilePather.Reload(true);     // synchronous, never await the async variant
     ExilePather.ClearObstacles(); // dynamic obstacles are per-map
-    Explorer.Reset();
+    explorer.Reset();             // your IExplorer instance, e.g. a GridExplorer
     _pathHash = LokiPoe.LocalData.AreaHash;
 }
 if (!ExilePather.IsReady) return;  // gate explorer.Tick()/FindPath behind this</code></pre>
@@ -141,7 +141,7 @@ Mechanics → Explore → MapEnd</code></pre>
         <li><strong>String-pull</strong>, aim at the farthest path waypoint with clear line-of-sight
           (<code>CanObjectSee</code>) so you never cut a corner into a wall.</li>
         <li><strong>Give-up counters</strong>, after N consecutive no-progress events, abandon the target:
-          <code>Explorer.Ignore(loc)</code> for explore, blacklist the object id for loot/chests.</li>
+          <code>explorer.Ignore(loc)</code> for explore, blacklist the object id for loot/chests.</li>
         <li><strong>Dynamic obstacles</strong>, when a corridor is navmesh-walkable but physically blocked,
           <code>AddCircleObstacle</code> ahead + <code>SignalObstacleUpdate()</code> so future paths route around
           it. Clear obstacles on area change.</li>
@@ -157,7 +157,7 @@ Mechanics → Explore → MapEnd</code></pre>
         <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
         <div class="callout__body">
           <span class="callout__title">Per-item-id counters don't work for "can't pick up"</span>
-          <p><code>Coroutines.InteractWith</code> returns OK even when an item can't be picked up (inventory full),
+          <p><code>Coroutines.InteractWith</code> returns <code>true</code> even when an item can't be picked up (inventory full),
             so a naive loop re-targets it forever. A per-item-id attempt counter fails too: each re-detection
             gets a different <code>WorldItem</code> id, resetting the count. The working signal is the
             <strong>inventory item count</strong>: snapshot <code>Items.Count</code> before/after interacting; if
@@ -184,7 +184,7 @@ Mechanics → Explore → MapEnd</code></pre>
     || (!explorer.HasLocation &amp;&amp; explorer.PercentComplete &gt;= 80);</code></pre>
       <p>If you must kill the boss but it never loaded (the explorer marked tiles "seen" by line-of-sight without
         physically entering the arena), re-sweep: tighten the explorer's seen/known radius and
-        <code>Explorer.Reset()</code> to force physical traversal, up to a sweep cap.</p>
+        <code>explorer.Reset()</code> to force physical traversal, up to a sweep cap.</p>
 
       <h2 id="checklist">Pre-flight checklist</h2>
       <div class="callout callout--note">

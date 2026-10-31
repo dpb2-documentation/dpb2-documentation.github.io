@@ -333,7 +333,7 @@ if (atlas.IsOpened)
         now carries a <code>List&lt;ContentIcon&gt; Contents</code> (each <code>ContentIcon</code> has a
         <code>ContentText</code> string like <code>"Delirium Fog"</code>), and <code>FullTooltip</code> is built
         from that list rather than scraped from the tooltips. <code>AtlasNode</code> also gained
-        <code>CruxOfNothingnessBonus</code>. To spend atlas points, <code>AtlasSkillUi</code> can allocate
+        <code>CruxOfNothingnessBonus</code>. To spend atlas points, <code>AtlasSkillsUi</code> can allocate
         passives, including <code>ChoosePassiveMastery(int id, int acceptedMasteryId)</code> for masteries
         (use <kbd class="kbd">Alt+Shift+A</kbd> in-game to dump mastery info).</p>
 
@@ -362,7 +362,7 @@ if (atlas.IsOpened)
             <tr><td><code>ResurrectPanel</code></td><td><code>IsOpened</code> / <code>Resurrect()</code>, endgame death handling.</td></tr>
             <tr><td><code>CurrencyExchangeUi</code></td><td>Read-only market ratios (static). Used by currency pricing tools.</td></tr>
             <tr><td><code>WorldUi</code></td><td><code>GoToHideout()</code>, <code>TakeWaypoint(...)</code>, waypoints.</td></tr>
-            <tr><td><code>AtlasSkillUi</code></td><td>Allocate Atlas-tree passives, e.g. <code>ChoosePassiveMastery(id, acceptedMasteryId)</code>.</td></tr>
+            <tr><td><code>AtlasSkillsUi</code></td><td>Allocate Atlas-tree passives, e.g. <code>ChoosePassiveMastery(id, acceptedMasteryId)</code>.</td></tr>
             <tr><td><code>RitualFavorsUi</code> / <code>RuneshapeConbinationsUi</code></td><td>League-mechanic UIs (Ritual, Expedition runeshapes).</td></tr>
           </tbody>
         </table>

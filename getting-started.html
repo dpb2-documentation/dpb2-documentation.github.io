@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Getting Started · DPB2 Documentation</title>
-  <meta name="description" content="Install the .NET 8 toolchain, set up the DPB2 plugin template, and build & deploy your first plugin DLL.">
+  <meta name="description" content="Install the .NET 10 toolchain, set up the DPB2 plugin template, and build & deploy your first plugin DLL.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -38,15 +38,16 @@
 
       <h2 id="prerequisites">Prerequisites</h2>
       <ul>
-        <li>A working <strong>DPB2</strong> installation (this guide references <code>v0.4.5.x</code>).</li>
-        <li>The <strong>.NET 8 SDK</strong>, required to build <code>net8.0-windows</code> assemblies.</li>
+        <li>A working <strong>DPB2</strong> installation (this guide references <code>v0.4.5.98</code> or later; DPB2 itself needs the
+          <strong>.NET 10 Desktop Runtime x64</strong>).</li>
+        <li>The <strong>.NET 10 SDK</strong>, required to build <code>net10.0-windows</code> assemblies.</li>
         <li>An IDE: Visual Studio 2022, JetBrains Rider, or VS Code with the C# Dev Kit.</li>
         <li>Windows. The bot is a WPF desktop application.</li>
       </ul>
 
-      <h3 id="install-dotnet">Install the .NET 8 SDK</h3>
+      <h3 id="install-dotnet">Install the .NET 10 SDK</h3>
       <p>The quickest route on Windows is winget:</p>
-      <pre><code class="language-powershell">winget install Microsoft.DotNet.SDK.8</code></pre>
+      <pre><code class="language-powershell">winget install Microsoft.DotNet.SDK.10</code></pre>
       <p>Verify it is available. If <code>dotnet</code> is not on <code>PATH</code> for a fresh shell, call it
         with the full path:</p>
       <pre><code class="language-powershell"># typical install location
@@ -92,6 +93,19 @@ setx DPB2 "E:\DPB2 v04301\DPB2"</code></pre>
       <pre><code class="language-powershell"># install the template package, then scaffold a project
 dotnet new install Letale-vc.DPB2Plugintemplate
 dotnet new dpb2plugin -n MyFirstPlugin</code></pre>
+      <div class="callout callout--warning">
+        <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div class="callout__body">
+          <span class="callout__title">Retarget the template to .NET 10</span>
+          <p>DPB2 moved to .NET 10 in <code>v0.4.5.98</code>, but the template still generates
+            <code>&lt;TargetFramework&gt;net8.0-windows&lt;/TargetFramework&gt;</code>. Building that against a
+            current <code>DreamPoeBot.dll</code> fails with <code>CS1705</code> ("uses System.Runtime,
+            Version=10.0.0.0 which has a higher version than referenced assembly"). Change it to
+            <code>net10.0-windows</code> in the generated <code>.csproj</code>. Plugin DLLs already built for
+            .NET 8 generally still load, but ones that rely on struct memory layout, <code>Marshal</code> offsets
+            or <code>sizeof</code> need review.</p>
+        </div>
+      </div>
 
       <h2 id="build-deploy">Build &amp; deploy</h2>
       <p>Build in Release. With <code>CopyToPlugins</code> enabled, the DLL lands in the right folder automatically:</p>
